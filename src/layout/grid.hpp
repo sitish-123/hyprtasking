@@ -22,6 +22,18 @@ class HTLayoutGrid: public HTLayoutBase {
     std::unordered_map<WORKSPACEID, HTGridSlot> ws_slot_cache;
     std::unordered_map<long long, WORKSPACEID> slot_ws_cache;
 
+    // Layout cache. build_overview_layout() runs on EVERY render frame — including the
+    // ~71fps of content-driven re-renders when the overview sits open over a live window.
+    // The result only depends on (stage, offset, scale, dims, monitor size), so cache it
+    // and skip the rebuild + the per-frame rawMonitorFocus save/restore when unchanged.
+    bool m_layout_cached = false;
+    HTViewStage m_cached_stage {};
+    Vector2D m_cached_offset {};
+    float m_cached_scale = 0;
+    int m_cached_rows = 0;
+    int m_cached_cols = 0;
+    Vector2D m_cached_mon_size {};
+
     static long long pack_slot(int layer, int x, int y);
 
   public:

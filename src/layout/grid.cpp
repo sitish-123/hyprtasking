@@ -112,6 +112,7 @@ void HTLayoutGrid::refresh_workspace_cache(
         return;
 
     refresh_grid_dims();
+    m_layout_cached = false;  // dims/slots may have changed → force a layout rebuild
     int ROWS, COLS;
     get_grid_dims(ROWS, COLS);
     const int LAYERS = HTConfig::value<Config::INTEGER>("grid:layers");
@@ -405,6 +406,18 @@ void HTLayoutGrid::build_overview_layout(HTViewStage stage) {
     int ROWS, COLS;
     get_grid_dims(ROWS, COLS);
 
+    // Reuse the cached layout when nothing that affects it changed. This is the hot path:
+    // it fires on every render frame, so at 71fps (overview open over a live window) this
+    // skips 71 map rebuilds + 142 focus-state mutations per second. offset/scale are the
+    // settled goal values when static → exact-equal → cache hit; during animation they
+    // change each frame → miss → rebuild (correct).
+    const Vector2D cur_offset = offset->value();
+    const float cur_scale = scale->value();
+    if (m_layout_cached && stage == m_cached_stage && ROWS == m_cached_rows
+        && COLS == m_cached_cols && cur_offset == m_cached_offset && cur_scale == m_cached_scale
+        && monitor->m_transformedSize == m_cached_mon_size)
+        return;  // overview_layout still valid
+
     const PHLMONITOR last_monitor = Desktop::focusState()->monitor();
     Desktop::focusState()->rawMonitorFocus(monitor);
 
@@ -422,6 +435,14 @@ void HTLayoutGrid::build_overview_layout(HTViewStage stage) {
 
     if (last_monitor != nullptr)
         Desktop::focusState()->rawMonitorFocus(last_monitor);
+
+    m_layout_cached  = true;
+    m_cached_stage   = stage;
+    m_cached_offset  = cur_offset;
+    m_cached_scale   = cur_scale;
+    m_cached_rows    = ROWS;
+    m_cached_cols    = COLS;
+    m_cached_mon_size = monitor->m_transformedSize;
 }
 
 // Render each visible workspace directly into its grid tile via a scaled
