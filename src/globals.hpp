@@ -20,6 +20,7 @@ inline CFunctionHook* render_border2_hook = nullptr;
 inline CFunctionHook* blur_optimizations_hook = nullptr;
 inline CFunctionHook* should_render_window_hook = nullptr;
 inline CFunctionHook* is_solitary_blocked_hook = nullptr;
+inline CFunctionHook* damage_window_hook = nullptr;
 typedef uint32_t (*origIsSolitaryBlocked)(void*, bool);
 inline void* render_window = nullptr;
 

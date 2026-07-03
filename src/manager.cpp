@@ -206,3 +206,16 @@ bool HTManager::cursor_view_active() {
         return false;
     return view->active;
 }
+
+bool HTManager::overview_static_on_monitor(PHLMONITOR pMonitor) {
+    // Any in-flight interaction keeps rendering live (a window drag is driven by
+    // render()'s own damage gate, so it stays live even with content damage frozen).
+    if (pMonitor == nullptr || swipe_state != HT_SWIPE_NONE)
+        return false;
+    const PHTVIEW view = get_view_from_monitor(pMonitor);
+    if (view == nullptr || !view->active || view->closing || view->navigating)
+        return false;
+    if (view->layout == nullptr || view->layout->is_animating())
+        return false;
+    return true;
+}

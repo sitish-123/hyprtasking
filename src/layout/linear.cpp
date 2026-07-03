@@ -302,6 +302,11 @@ void HTLayoutLinear::build_overview_layout(HTViewStage stage) {
     }
 }
 
+bool HTLayoutLinear::is_animating() {
+    return scroll_offset->isBeingAnimated() || view_offset->isBeingAnimated()
+        || blur_strength->isBeingAnimated() || dim_opacity->isBeingAnimated();
+}
+
 void HTLayoutLinear::render() {
     HTLayoutBase::render();
     CScopeGuard x([this] { post_render(); });

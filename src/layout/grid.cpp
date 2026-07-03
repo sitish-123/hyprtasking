@@ -346,6 +346,10 @@ void HTLayoutGrid::init_position() {
     scale->setValueAndWarp(1.f);
 }
 
+bool HTLayoutGrid::is_animating() {
+    return scale->isBeingAnimated() || offset->isBeingAnimated();
+}
+
 CBox HTLayoutGrid::calculate_ws_box(int x, int y, HTViewStage stage) {
     const PHLMONITOR monitor = get_monitor();
     if (monitor == nullptr)

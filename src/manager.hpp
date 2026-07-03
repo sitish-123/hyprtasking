@@ -61,4 +61,9 @@ class HTManager {
 
     bool has_active_view();
     bool cursor_view_active();
+
+    // True when the overview on this monitor is fully STATIC (open, not animating,
+    // navigating, closing, or mid-swipe). Used to freeze client content damage so an
+    // idle overview over a live window doesn't drive a full re-render every frame.
+    bool overview_static_on_monitor(PHLMONITOR pMonitor);
 };

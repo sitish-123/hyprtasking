@@ -64,6 +64,10 @@ class HTLayoutBase {
     virtual float drag_window_scale();
     // Only to be called when closed, init/reset the position in case of config/monitor change
     virtual void init_position();
+    // True while the open/close/pan animation is in flight (offset/scale still moving).
+    // Used to decide when the overview is fully static (safe to freeze content damage).
+    virtual bool is_animating() { return false; }
+
     // Populate overview_layout as if the overview was at a given stage
     virtual void build_overview_layout(HTViewStage stage);
 

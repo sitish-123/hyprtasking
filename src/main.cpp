@@ -470,6 +470,22 @@ static uint32_t hook_is_solitary_blocked(void* thisptr, bool full) {
     return (*(origIsSolitaryBlocked)is_solitary_blocked_hook->m_original)(thisptr, full);
 }
 
+// Freeze client content damage while the overview sits STATIC over a live window.
+// Without this, a video / animating window in a visible tile drives a full-overview
+// re-render at its content rate (measured ~71fps / ~54% CPU). Dropping the damage
+// means the monitor isn't re-scheduled, so Hyprland holds the last rendered frame — a
+// free "snapshot" — until an animation/gesture/drag (all of which damage via other
+// paths) makes it live again. Only the window's own monitor is affected.
+typedef void (*damage_window_t)(void*, PHLWINDOW, bool);
+static void hook_damage_window(void* thisptr, PHLWINDOW window, bool forceFull) {
+    if (ht_manager != nullptr && window != nullptr) {
+        const PHLMONITOR mon = window->m_monitor.lock();
+        if (mon != nullptr && ht_manager->overview_static_on_monitor(mon))
+            return;
+    }
+    ((damage_window_t)(damage_window_hook->m_original))(thisptr, window, forceFull);
+}
+
 static void on_mouse_button(IPointer::SButtonEvent e, Event::SCallbackInfo& info) {
     if (ht_manager == nullptr)
         return;
@@ -677,6 +693,15 @@ static void init_functions() {
         HyprlandAPI::createFunctionHook(PHANDLE, FNS4[0].address, (void*)hook_is_solitary_blocked);
     Log::logger->log(LOG, "[Hyprtasking] Attempting hook {}", FNS4[0].signature);
     success = is_solitary_blocked_hook->hook() && success;
+
+    // Freeze content damage while the overview is idle-open (see hook_damage_window).
+    static auto FNS5 = HyprlandAPI::findFunctionsByName(PHANDLE, "damageWindow");
+    if (FNS5.empty())
+        fail_exit("No damageWindow");
+    damage_window_hook =
+        HyprlandAPI::createFunctionHook(PHANDLE, FNS5[0].address, (void*)hook_damage_window);
+    Log::logger->log(LOG, "[Hyprtasking] Attempting hook {}", FNS5[0].signature);
+    success = damage_window_hook->hook() && success;
 
     if (!success)
         fail_exit("Failed initializing hooks");
