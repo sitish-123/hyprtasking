@@ -9,6 +9,7 @@
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/layout/LayoutManager.hpp>
 
 #include "config/shared/workspace/WorkspaceRuleManager.hpp"
 #include "layout/grid.hpp"
@@ -208,9 +209,14 @@ bool HTManager::cursor_view_active() {
 }
 
 bool HTManager::overview_static_on_monitor(PHLMONITOR pMonitor) {
-    // Any in-flight interaction keeps rendering live (a window drag is driven by
-    // render()'s own damage gate, so it stays live even with content damage frozen).
+    // Any in-flight interaction keeps rendering live. A window drag is NOT covered by
+    // is_animating() (it only moves m_realPosition, no scale/offset anim), so it must be
+    // checked explicitly: freezing the dragged window's damage here would starve the
+    // render loop of frames (grid's damageMonitor only fires from inside a scheduled
+    // render), leaving the drag jittery — updating only on incidental cursor frames.
     if (pMonitor == nullptr || swipe_state != HT_SWIPE_NONE)
+        return false;
+    if (g_layoutManager->dragController()->target() != nullptr)
         return false;
     const PHTVIEW view = get_view_from_monitor(pMonitor);
     if (view == nullptr || !view->active || view->closing || view->navigating)
