@@ -10,6 +10,7 @@
 #include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/macros.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 #include <hyprland/src/managers/PointerManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
@@ -604,14 +605,29 @@ static void on_config_reloaded() {
 // end_window_drag can still read a stale count). Without a rebuild the slot/layout caches
 // keep serving a stale layout — tiles at wrong boxes = the "broken graphics after drop".
 // Rebuild dims/slots/layout on any workspace-set change while open, and repaint.
+// A single drop fires a BURST of these events (window.moveToWorkspace + workspace.created
+// + workspace.removed, sometimes across two ticks). Refreshing immediately on each one
+// rebuilds the grid up to 3× while the post-drop settle keeps the overview live → the
+// layout visibly thrashes ("vibrating"). Coalesce the burst into ONE deferred refresh via
+// doLater: it runs after the current event batch is fully processed and BEFORE the next
+// render, so the overview repaints exactly one consistent, settled layout.
+static bool s_ws_refresh_pending = false;
 static void on_workspaces_changed() {
     if (ht_manager == nullptr || !ht_manager->has_active_view())
         return;
-    ht_manager->refresh_all_grid_caches();
-    for (const PHTVIEW& view : ht_manager->views)
-        if (view != nullptr && view->active)
-            if (const PHLMONITOR mon = view->get_monitor())
-                g_pHyprRenderer->damageMonitor(mon);
+    if (s_ws_refresh_pending)
+        return;
+    s_ws_refresh_pending = true;
+    g_pEventLoopManager->doLater([]() {
+        s_ws_refresh_pending = false;
+        if (ht_manager == nullptr || !ht_manager->has_active_view())
+            return;
+        ht_manager->refresh_all_grid_caches();
+        for (const PHTVIEW& view : ht_manager->views)
+            if (view != nullptr && view->active)
+                if (const PHLMONITOR mon = view->get_monitor())
+                    g_pHyprRenderer->damageMonitor(mon);
+    });
 }
 
 static void init_functions() {
