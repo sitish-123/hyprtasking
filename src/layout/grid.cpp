@@ -550,7 +550,16 @@ void HTLayoutGrid::render() {
     );
     start_workspace->m_visible = true;
 
-    g_pHyprRenderer->damageMonitor(monitor);
+    // Only keep repainting while something is actually moving. An open, IDLE overview
+    // used to damage the whole monitor every frame forever → continuous full re-render
+    // of every tile (the main "feels heavy" cost). Open/close/move/swipe each damage on
+    // their own, and Hyprland's animation system schedules frames while offset/scale
+    // animate; when fully static we let the last frame stand. (Trade-off: live in-tile
+    // window content, e.g. a playing video, won't refresh while the overview sits idle.)
+    const bool dragging = g_layoutManager->dragController()->target() != nullptr;
+    if (scale->isBeingAnimated() || offset->isBeingAnimated()
+        || par_view->navigating || par_view->closing || dragging)
+        g_pHyprRenderer->damageMonitor(monitor);
 
     // Dragged window rendered on top, following the cursor.
     const PHTVIEW cursor_view = ht_manager->get_view_from_cursor();

@@ -16,12 +16,15 @@ template<typename T>
 inline T value(std::string config) {
     static std::unordered_map<std::string, CConfigValue<T>> cache;
 
-    if (!cache.count(config)) {
-        const CConfigValue<T> val("plugin:hyprtasking:" + config);
-        cache[config] = val;
+    // Single hashed lookup on the hot path (was count() + operator[] = two hashes).
+    // This runs dozens of times per frame during animations/gestures.
+    auto it = cache.find(config);
+    if (it == cache.end()) {
+        CConfigValue<T> val("plugin:hyprtasking:" + config);
+        it = cache.emplace(std::move(config), std::move(val)).first;
     }
 
-    return *cache[config];
+    return *it->second;
 }
 
 } // namespace HTConfig
