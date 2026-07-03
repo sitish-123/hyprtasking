@@ -171,6 +171,17 @@ bool HTManager::end_window_drag() {
     dragged_window->alpha(Desktop::View::WINDOW_ALPHA_MOVE_TO_WORKSPACE)->setValueAndWarp(1.0);
     dragged_window->alpha(Desktop::View::WINDOW_ALPHA_MOVE_FROM_WORKSPACE)->setValueAndWarp(1.0);
 
+    // Keep the overview live through the deferred repaints this drop triggers (surface
+    // re-commit on the new workspace, blur recompute, cursor warp). Without this the
+    // damage-suppression snapshot re-engages the instant the drag target clears and
+    // freezes a stale frame — broken/flickering graphics until an unrelated repaint. Kick
+    // one immediate repaint on every monitor so the settled arrangement paints at once.
+    drag_settle_until = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    for (const PHTVIEW& view : views)
+        if (view != nullptr && view->active)
+            if (const PHLMONITOR mon = view->get_monitor())
+                g_pHyprRenderer->damageMonitor(mon);
+
     // if (o_workspace != nullptr)
     //     cursor_monitor->changeWorkspace(o_workspace.lock(), true);
 

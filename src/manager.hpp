@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/helpers/AnimatedVariable.hpp>
 
@@ -61,6 +63,14 @@ class HTManager {
 
     bool has_active_view();
     bool cursor_view_active();
+
+    // Set to a near-future instant when a window drag ends: for this brief window the
+    // overview is kept "live" (non-static) so the deferred repaints a drop triggers —
+    // window surface re-commit on the new workspace, blur recompute, cursor warp — are
+    // NOT frozen by the damage-suppression snapshot, which otherwise re-engages the moment
+    // the drag target clears and leaves a stale/broken frame on screen until an unrelated
+    // event forces a repaint.
+    std::chrono::steady_clock::time_point drag_settle_until{};
 
     // True when the overview on this monitor is fully STATIC (open, not animating,
     // navigating, closing, or mid-swipe). Used to freeze client content damage so an

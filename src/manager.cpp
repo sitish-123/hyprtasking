@@ -218,6 +218,9 @@ bool HTManager::overview_static_on_monitor(PHLMONITOR pMonitor) {
         return false;
     if (g_layoutManager->dragController()->target() != nullptr)
         return false;
+    // Just-dropped: stay live briefly so the move's deferred repaints aren't frozen.
+    if (std::chrono::steady_clock::now() < drag_settle_until)
+        return false;
     const PHTVIEW view = get_view_from_monitor(pMonitor);
     if (view == nullptr || !view->active || view->closing || view->navigating)
         return false;
