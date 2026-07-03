@@ -325,8 +325,17 @@ void HTLayoutLinear::render() {
     const auto time = Time::steadyNow();
 
 
-    g_pHyprRenderer->damageMonitor(monitor);
-    g_pHyprRenderer->m_renderData.pMonitor->m_blurFBShouldRender = true;
+    // Idle-damage gate (parity with the grid layout): only keep repainting while
+    // something is actually moving. An open, idle overview otherwise re-renders every
+    // frame forever. Open/close/move/swipe damage on their own, and Hyprland's
+    // animation system schedules frames while these animate.
+    const bool dragging = g_layoutManager->dragController()->target() != nullptr;
+    if (scroll_offset->isBeingAnimated() || view_offset->isBeingAnimated()
+        || blur_strength->isBeingAnimated() || dim_opacity->isBeingAnimated()
+        || par_view->navigating || par_view->closing || dragging) {
+        g_pHyprRenderer->damageMonitor(monitor);
+        g_pHyprRenderer->m_renderData.pMonitor->m_blurFBShouldRender = true;
+    }
 
     // Do a dance with active workspaces: Hyprland will only properly render the
     // current active one so make the workspace active before rendering it, etc
