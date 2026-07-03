@@ -598,6 +598,22 @@ static void on_config_reloaded() {
     ht_manager->refresh_all_grid_caches();
 }
 
+// While the overview is OPEN, the set of workspaces (and, with an adaptive grid, the grid
+// dimensions) can change under it: a drop creates a target workspace and/or empties the
+// source (Hyprland may destroy the emptied one on a LATER tick, so refreshing only inside
+// end_window_drag can still read a stale count). Without a rebuild the slot/layout caches
+// keep serving a stale layout — tiles at wrong boxes = the "broken graphics after drop".
+// Rebuild dims/slots/layout on any workspace-set change while open, and repaint.
+static void on_workspaces_changed() {
+    if (ht_manager == nullptr || !ht_manager->has_active_view())
+        return;
+    ht_manager->refresh_all_grid_caches();
+    for (const PHTVIEW& view : ht_manager->views)
+        if (view != nullptr && view->active)
+            if (const PHLMONITOR mon = view->get_monitor())
+                g_pHyprRenderer->damageMonitor(mon);
+}
+
 static void init_functions() {
     bool success = true;
 
@@ -726,6 +742,12 @@ static void register_callbacks() {
     static auto P10 = Event::bus()->m_events.config.reloaded.listen(on_config_reloaded);
     static auto P11 = Event::bus()->m_events.monitor.added.listen(register_monitors);
     static auto P12 = Event::bus()->m_events.monitor.removed.listen(on_monitor_removed);
+
+    // Rebuild the grid when the workspace set changes while the overview is open (drop
+    // creating/emptying a workspace, incl. Hyprland's deferred destroy of an emptied one).
+    static auto P13 = Event::bus()->m_events.workspace.created.listen([](PHLWORKSPACEREF) { on_workspaces_changed(); });
+    static auto P14 = Event::bus()->m_events.workspace.removed.listen([](PHLWORKSPACEREF) { on_workspaces_changed(); });
+    static auto P15 = Event::bus()->m_events.window.moveToWorkspace.listen([](PHLWINDOW, PHLWORKSPACE) { on_workspaces_changed(); });
 }
 
 
