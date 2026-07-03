@@ -786,6 +786,11 @@ static void init_config() {
 
     // swipe
     addConfigValue(CIntValue, "gestures:enabled", "enabled", 1);
+    // Per-gesture enables (on top of the global 'enabled'): open/close overview (4↕),
+    // grid navigation (3-finger), and the 4↔ workspace switch — toggle each independently.
+    addConfigValue(CIntValue, "gestures:open_enabled", "open enabled", 1);
+    addConfigValue(CIntValue, "gestures:move_enabled", "move enabled", 1);
+    addConfigValue(CIntValue, "gestures:switch_enabled", "switch enabled", 1);
     addConfigValue(CIntValue, "gestures:move_fingers", "move fingers", 3);
     addConfigValue(CFloatValue, "gestures:move_distance", "move distance", 300.0);
     addConfigValue(CIntValue, "gestures:open_fingers", "open fingers", 4);

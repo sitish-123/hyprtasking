@@ -234,6 +234,10 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
     const float OPEN_DISTANCE = HTConfig::value<Config::FLOAT>("gestures:open_distance");
     const unsigned int OPEN_FINGERS = HTConfig::value<Config::INTEGER>("gestures:open_fingers");
     const int OPEN_POSITIVE = HTConfig::value<Config::INTEGER>("gestures:open_positive");
+    // Per-gesture enables (independent toggles).
+    const int OPEN_ENABLED = HTConfig::value<Config::INTEGER>("gestures:open_enabled");
+    const int MOVE_ENABLED = HTConfig::value<Config::INTEGER>("gestures:move_enabled");
+    const int SWITCH_ENABLED = HTConfig::value<Config::INTEGER>("gestures:switch_enabled");
 
     bool res = false;
     char swipe_direction = 0;
@@ -291,7 +295,7 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
     // Handled here, before the cursor_view null guard, because it needs no overview view
     // — otherwise it wouldn't work until the overview had been opened once (the bug where
     // the swipe was dead on first use after a reload).
-    if (swipe_state == HT_SWIPE_NONE && e.fingers == OPEN_FINGERS && swipe_direction == 'h'
+    if (swipe_state == HT_SWIPE_NONE && SWITCH_ENABLED && e.fingers == OPEN_FINGERS && swipe_direction == 'h'
         && (cursor_view == nullptr || !cursor_view->active)) {
         // 3-finger guard rail: don't hijack a 3-finger move that's still animating.
         if (cursor_view != nullptr && cursor_view->navigating && (int)e.fingers != committed_fingers)
@@ -351,6 +355,8 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
         }
         if (swipe_direction != 'v')
             return res; // direction still ambiguous; wait for a clearer delta
+        if (!OPEN_ENABLED)
+            return res; // open/close-overview gesture disabled
 
         // 4-finger VERTICAL: open / close the overview (workspace manager).
         if (deltaY <= 0 && (!cursor_view->active || cursor_view->closing)) {
@@ -372,7 +378,7 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
         const float swipe_perc = 1.0 - std::clamp(swipe_amt / OPEN_DISTANCE, 0.01f, 1.0f);
         cursor_view->layout->close_open_lerp(swipe_perc);
         return res;
-    } else if (e.fingers == MOVE_FINGERS) {
+    } else if (MOVE_ENABLED && e.fingers == MOVE_FINGERS) {
         // 3-finger: navigate the overview grid.
         if (cursor_view->active)
             return false;
