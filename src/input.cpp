@@ -250,8 +250,39 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
     // path.) Once a gesture commits to a mode, it sticks until swipe_end().
     if (swipe_state == HT_SWIPE_SWITCH) {
         switch_accum += e.delta.x;
-        // Feed Hyprland's native workspace-swipe engine live (absolute accumulated
-        // delta). Negated so content follows the finger (swipe right -> the workspace to
+
+        // Hybrid "climb past the last workspace". Hyprland's unified swipe engine only
+        // slides to ONE neighbour per gesture, and its create_new spawns at most one empty
+        // workspace past the last — so a bare swipe caps at (last active + 1). To let a
+        // single continuous swipe cross several workspaces AND keep creating new ones
+        // (4 -> 5 -> 6 -> ...), commit + re-anchor every time the finger travels a full
+        // workspace-width: end() commits the current slide, begin() re-anchors on whatever
+        // we landed on, and if the engine couldn't advance (edge reached / create_new
+        // maxed) we force the step with a discrete `workspace +1/-1` dispatch (which always
+        // creates the target). The sub-width remainder still slides smoothly below, so
+        // ordinary single-workspace swipes feel exactly as before.
+        static auto const PDIST = CConfigValue<Config::INTEGER>("gestures:workspace_swipe_distance");
+        const double DIST = std::max<double>(1.0, (double)*PDIST);
+        const PHLMONITOR mon = g_pCompositor->getMonitorFromCursor();
+        while (mon != nullptr && std::abs(switch_accum) >= DIST) {
+            const int         finger_dir = switch_accum > 0 ? 1 : -1; // +1 = finger moved right
+            const WORKSPACEID before = mon->m_activeWorkspace ? mon->m_activeWorkspace->m_id : -1;
+            g_pUnifiedWorkspaceSwipe->end(); // >= a full width, so this commits (not reverts)
+            const WORKSPACEID after = mon->m_activeWorkspace ? mon->m_activeWorkspace->m_id : -1;
+            if (after == before) {
+                // Engine couldn't move (no next workspace / create_new maxed): force it.
+                // Content follows the finger, so finger-right => previous (lower id),
+                // finger-left => next (higher id, created on demand).
+                const auto it = g_pKeybindManager->m_dispatchers.find("workspace");
+                if (it != g_pKeybindManager->m_dispatchers.end())
+                    it->second(finger_dir > 0 ? "-1" : "+1");
+            }
+            switch_accum -= finger_dir * DIST;
+            g_pUnifiedWorkspaceSwipe->begin(); // re-anchor on the workspace we just landed on
+        }
+
+        // Feed Hyprland's native workspace-swipe engine live (accumulated sub-width
+        // remainder). Negated so content follows the finger (swipe right -> the workspace to
         // the left slides in). Flip the sign of switch_accum here to reverse direction.
         g_pUnifiedWorkspaceSwipe->update(-switch_accum);
         return true;
@@ -287,6 +318,13 @@ bool HTManager::swipe_update(IPointer::SSwipeUpdateEvent e) {
         swipe_amt += deltaY;
         const float swipe_perc = 1.0 - std::clamp(swipe_amt / OPEN_DISTANCE, 0.01f, 1.0f);
         cursor_view->layout->close_open_lerp(swipe_perc);
+        // The open/close swipe WARPS offset each tick (not an animation), so with the
+        // idle-damage gating in render() we must schedule the repaint here — otherwise
+        // the overview doesn't redraw as the finger moves (flickers/looks frozen).
+        if (cursor_monitor != nullptr) {
+            g_pHyprRenderer->damageMonitor(cursor_monitor);
+            g_pCompositor->scheduleFrameForMonitor(cursor_monitor);
+        }
         return true;
     }
 
