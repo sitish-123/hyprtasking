@@ -153,7 +153,11 @@ CBox HTLayoutBase::get_global_window_box(PHLWINDOW window, WORKSPACEID workspace
 }
 
 CBox HTLayoutBase::get_global_ws_box(WORKSPACEID workspace_id) {
-    const CBox scaled_ws_box = overview_layout[workspace_id].box;
+    // .find, not operator[]: these geometry lookups run during drags/hit-tests on ids that
+    // may not be in the current layout; operator[] would default-insert an empty entry each
+    // time, polluting overview_layout until the next rebuild.
+    const auto it = overview_layout.find(workspace_id);
+    const CBox scaled_ws_box = it == overview_layout.end() ? CBox {} : it->second.box;
     const Vector2D top_left = local_ws_scaled_to_global(scaled_ws_box.pos(), workspace_id);
     const Vector2D bottom_right =
         local_ws_scaled_to_global(scaled_ws_box.pos() + scaled_ws_box.size(), workspace_id);
@@ -165,7 +169,8 @@ Vector2D HTLayoutBase::global_to_local_ws_unscaled(Vector2D pos, WORKSPACEID wor
     if (monitor == nullptr)
         return {};
 
-    CBox workspace_box = overview_layout[workspace_id].box;
+    const auto it = overview_layout.find(workspace_id);      // .find: don't pollute the map on read
+    CBox workspace_box = it == overview_layout.end() ? CBox {} : it->second.box;
     if (workspace_box.empty())
         return {};
     pos -= monitor->m_position;
@@ -191,7 +196,8 @@ Vector2D HTLayoutBase::local_ws_unscaled_to_global(Vector2D pos, WORKSPACEID wor
     if (monitor == nullptr)
         return {};
 
-    CBox workspace_box = overview_layout[workspace_id].box;
+    const auto it = overview_layout.find(workspace_id);      // .find: don't pollute the map on read
+    CBox workspace_box = it == overview_layout.end() ? CBox {} : it->second.box;
     if (workspace_box.empty())
         return {};
     pos *= workspace_box.w / monitor->m_transformedSize.x;
