@@ -53,8 +53,10 @@ PHLWINDOW HTManager::get_window_from_cursor(bool return_focused) {
     if (cursor_monitor == nullptr)
         return nullptr;
 
-    if (return_focused)
-        return cursor_monitor->m_activeWorkspace->getLastFocusedWindow();
+    if (return_focused) {
+        const PHLWORKSPACE aw = cursor_monitor->m_activeWorkspace;
+        return aw == nullptr ? nullptr : aw->getLastFocusedWindow();
+    }
 
     const PHTVIEW cursor_view = get_view_from_monitor(cursor_monitor);
     if (cursor_view == nullptr)

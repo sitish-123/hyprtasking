@@ -116,10 +116,13 @@ static void set_layer(PHTVIEW view, int new_layer) {
     //   dispatch hyprtasking:toggle cursor'
     if (view->closing)
         return;
+    const PHLMONITOR mon = view->get_monitor();
+    if (mon == nullptr || view->layout == nullptr)  // get_monitor() can return null
+        return;
     Log::logger->log(
         LOG,
         "[Hyprtasking] View \"{}\", previous layer: {}, new: {}",
-        view->get_monitor()->m_name,
+        mon->m_name,
         view->layout->layer,
         new_layer
     );
@@ -142,10 +145,17 @@ static SDispatchResult change_layer(std::string arg, bool move_window) {
     const int original_layer = cursor_view->layout->layer;
 
     int resulting_layer = original_layer;
-    if (arg[0] == '+' || arg[0] == '-') {
-        resulting_layer += std::stoi(arg);
-    } else {
-        resulting_layer = std::stoi(arg);
+    // std::stoi throws (uncaught → crash) on an empty or non-numeric arg — e.g. a
+    // `hyprtasking:setlayer` with no/garbage argument. Parse defensively.
+    try {
+        if (arg.empty())
+            return {.success = false, .error = "setlayer requires a numeric argument"};
+        else if (arg[0] == '+' || arg[0] == '-')
+            resulting_layer += std::stoi(arg);
+        else
+            resulting_layer = std::stoi(arg);
+    } catch (const std::exception&) {
+        return {.success = false, .error = "invalid layer argument: " + arg};
     }
 
     if (resulting_layer < 0 || resulting_layer >= LAYERS) {
@@ -280,7 +290,12 @@ static void hook_render_workspace(
         return;
     }
     const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
-    if ((view != nullptr && view->navigating) || ht_manager->has_active_view()) {
+    // Render THIS monitor's overview only when THIS monitor's view is active/navigating.
+    // The old `|| has_active_view()` was both a null-deref (view can be null here while
+    // another monitor has an active view — get_view_from_monitor returns null during
+    // (re)connect/teardown) AND wrong: it rendered the overview on EVERY monitor the moment
+    // it opened on one (show_cursor_view only activates the cursor monitor's view).
+    if (view != nullptr && view->layout != nullptr && (view->active || view->navigating)) {
         view->layout->render();
     } else {
         ((render_workspace_t)(render_workspace_hook
