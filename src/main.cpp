@@ -598,17 +598,42 @@ static void on_config_reloaded() {
     if (ht_manager == nullptr)
         return;
 
+    const Config::STRING new_layout = HTConfig::value<Config::STRING>("layout");
+    const bool close_on_reload = HTConfig::value<Config::INTEGER>("close_overview_on_reload");
+
     // re-init scale and offset for inactive views, change layout if changed
     for (PHTVIEW& view : ht_manager->views) {
-        if (view == nullptr)
+        if (view == nullptr || view->layout == nullptr)
             continue;
-        const Config::STRING new_layout = HTConfig::value<Config::STRING>("layout");
-        if (HTConfig::value<Config::INTEGER>("close_overview_on_reload")
-            || view->layout->layout_name() != new_layout) {
+
+        const bool layout_changed = view->layout->layout_name() != new_layout;
+
+        // Leave an already-open overview open unless something forces a close.
+        // CRITICAL: the old code called view->hide(false) on EVERY view — including
+        // closed ones. hide() sets active=true/closing=true and defers the reset to an
+        // animation-end callback, but change_layout()->init_position()->resetAllCallbacks()
+        // right after WIPES that callback, and for an idle/closed overview no animation
+        // starts at all (unchanged goal → no-op) so the callback would never fire anyway.
+        // Net effect: every view was left stuck active=true/closing=true after each reload,
+        // which made hook_render_workspace render the overview path every frame and render()
+        // damageMonitor() every frame (closing==true) → permanent full-rate re-render,
+        // disabled scanout, and a broken toggle keybind — starting at login (the restore
+        // reload) and re-armed on every reload.
+        if (view->active && !close_on_reload && !layout_changed)
+            continue;
+
+        if (view->active) {
             Log::logger->log(LOG, "[Hyprtasking] Closing overview on config reload");
-            view->hide(false);
-            view->change_layout(new_layout);
+            view->hide(false);   // exit an OPEN overview to a workspace
         }
+        if (layout_changed)
+            view->change_layout(new_layout);
+
+        // Force the closed state SYNCHRONOUSLY (see above — the deferred reset can't be
+        // relied on). refresh_all_grid_caches() below re-seeds the closed position.
+        view->active = false;
+        view->closing = false;
+        view->navigating = false;
     }
 
     ht_manager->refresh_all_grid_caches();
