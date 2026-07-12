@@ -3,7 +3,7 @@
 #
 #   ./dev.sh build     just compile the fork
 #   ./dev.sh test      build + load the FORK build, adaptive grid ON (this session only)
-#   ./dev.sh restore   go back to the stable stock hyprtasking build
+#   ./dev.sh restore   go back to the daily fork build (delegates to overview-switch.sh)
 #
 # The fork-only `grid:adaptive` key is enabled at RUNTIME here (not written into
 # ~/.config/hypr/custom/general.lua), so the daily/stock build never sees an
@@ -42,12 +42,11 @@ case "${1:-test}" in
     ;;
 
   restore)
-    echo hyprtasking > "$STATE"
-    unload_overviews; sleep 0.3
-    hyprctl plugin load "$STOCK_SO" >/dev/null 2>&1 || true
-    hyprctl reload >/dev/null 2>&1
-    notify-send -t 2500 "hyprtasking" "Restored stable stock build" 2>/dev/null || true
-    echo "Restored stock build (stable, adaptive off). SUPER+CTRL+1 for scrolloverview."
+    # The fork is now the daily driver and its settings live in hyprland/hyprtasking.lua.
+    # Stock hyprtasking does NOT register the fork-only config keys that lua sets, so loading
+    # it triggers Hyprland's uncatchable config-error overlay. So 'restore' returns to the
+    # daily FORK build via the canonical switcher instead of loading stock.
+    exec "$HOME/.config/hypr/custom/scripts/overview-switch.sh" restore
     ;;
 
   *) echo "usage: dev.sh {build|test|restore}"; exit 1 ;;
