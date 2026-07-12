@@ -75,6 +75,10 @@ class HTLayoutGrid: public HTLayoutBase {
     // EXPERIMENTAL snapshots. snapshot_for renders `workspace` into its cached FBO if the
     // cache entry is invalid, and returns it; invalidate_snapshots forces a re-render.
     SP<Render::IFramebuffer> snapshot_for(PHLMONITOR monitor, PHLWORKSPACE workspace, const Time::steady_tp& time);
+    // Render every invalid snapshot for this monitor's real workspaces. MUST be called
+    // OUTSIDE a monitor render (on_show / a deferred damage refresh) — beginFullFakeRender
+    // nested in the monitor render corrupts state. No-op unless the snapshot flag is on.
+    void take_snapshots();
     void invalidate_snapshots() { for (auto& [id, s] : m_snapshots) s.valid = false; }
     // Invalidate ONE workspace's snapshot (live-content damage → re-render just that tile).
     void invalidate_snapshot(WORKSPACEID id) {

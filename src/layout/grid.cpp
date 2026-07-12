@@ -243,6 +243,11 @@ void HTLayoutGrid::on_show(CallbackFun on_complete) {
     *scale = calculate_ws_box(0, 0, HT_VIEW_OPENED).w / monitor->m_transformedSize.x; // 1 / ROWS
     // Offset for the whole grid of workspaces
     *offset = {0, 0};
+
+    // EXPERIMENTAL: pre-render the workspace snapshots now — on_show runs from an input event,
+    // OUTSIDE any monitor render, so beginFullFakeRender is top-level here (safe). render()
+    // then only composites the cached textures.
+    take_snapshots();
 }
 
 void HTLayoutGrid::on_hide(CallbackFun on_complete) {
@@ -477,6 +482,24 @@ SP<Render::IFramebuffer> HTLayoutGrid::snapshot_for(
     return snap.fb;
 }
 
+// Render every invalid snapshot for this monitor's real workspaces. Call OUTSIDE a render.
+void HTLayoutGrid::take_snapshots() {
+    if (!HTConfig::value<Config::INTEGER>("experimental:snapshots"))
+        return;
+    const PHLMONITOR monitor = get_monitor();
+    if (monitor == nullptr)
+        return;
+    const auto time = Time::steadyNow();
+    // ws_slot_cache holds every grid slot; getWorkspaceByID is null for synthetic cells, so
+    // only real workspaces get snapshotted. Restrict to this monitor's workspaces.
+    for (const auto& [ws_id, slot] : ws_slot_cache) {
+        const PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id);
+        if (ws == nullptr || ws->monitorID() != view_id)
+            continue;
+        snapshot_for(monitor, ws, time);
+    }
+}
+
 // Render each visible workspace directly into its grid tile via a scaled
 // renderWorkspace (renderModif). The renderTexture hook keeps the per-surface
 // scissor in sync with that renderModif, so window contents aren't culled near
@@ -538,17 +561,12 @@ void HTLayoutGrid::render() {
         return !global_box.expand(BORDERSIZE).intersection(global_mon_box).empty();
     };
 
-    // EXPERIMENTAL: snapshot every visible REAL workspace UP-FRONT (before any composite pass
-    // elements below), so the offscreen renders don't nest inside the outer render pass.
+    // EXPERIMENTAL snapshots: composite cached textures that were rendered OUTSIDE this pass
+    // (take_snapshots() in on_show / a deferred damage refresh). NEVER call the offscreen
+    // renderer here — nesting beginFullFakeRender inside the monitor render corrupts the
+    // render state and aborts in the blur path. If a tile's snapshot isn't ready yet,
+    // composite_tile falls back to the direct render path (no crash, just not cached).
     const bool USE_SNAPSHOTS = HTConfig::value<Config::INTEGER>("experimental:snapshots");
-    if (USE_SNAPSHOTS) {
-        for (const auto& [ws_id, ws_layout] : overview_layout) {
-            if (!tile_visible(ws_layout.box))
-                continue;
-            if (const PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id))
-                snapshot_for(monitor, ws, time);
-        }
-    }
 
     // Composite one tile: an experimental cached snapshot texture when available, else the
     // direct scaled renderWorkspace path (also the path for empty/synthetic cells).

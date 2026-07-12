@@ -82,4 +82,8 @@ class HTManager {
     // re-renders on the next composite (live tile content). Returns true if it did — the
     // damage hook then lets the damage through + schedules a repaint instead of freezing.
     bool on_window_damage(PHLWINDOW window);
+
+  private:
+    // Coalesces the deferred snapshot refresh scheduled from the damage hook.
+    bool m_snapshot_refresh_pending = false;
 };
