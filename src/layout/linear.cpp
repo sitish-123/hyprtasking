@@ -291,6 +291,10 @@ void HTLayoutLinear::build_overview_layout(HTViewStage stage) {
     }
     std::sort(monitor_workspaces.begin(), monitor_workspaces.end());
 
+    // No non-special workspaces on this monitor → .back() would be UB (crash). Nothing to
+    // lay out; leave overview_layout empty (render loop no-ops).
+    if (monitor_workspaces.empty())
+        return;
     WORKSPACEID big_id = monitor_workspaces.back();
     while (g_pCompositor->getWorkspaceByID(big_id) != nullptr)
         big_id++;
@@ -345,6 +349,8 @@ void HTLayoutLinear::render() {
     // Do a dance with active workspaces: Hyprland will only properly render the
     // current active one so make the workspace active before rendering it, etc
     const PHLWORKSPACE start_workspace = monitor->m_activeWorkspace;
+    if (start_workspace == nullptr)   // guard: grid render checks this, linear didn't → null deref
+        return;
     g_pDesktopAnimationManager->startAnimation(
         start_workspace,
         CDesktopAnimationManager::ANIMATION_TYPE_OUT,
