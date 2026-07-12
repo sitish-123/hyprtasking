@@ -8,12 +8,9 @@
 #include <hyprland/src/config/ConfigManager.hpp>
 #include <hyprland/src/desktop/DesktopTypes.hpp>
 #include <hyprland/src/managers/KeybindManager.hpp>
-#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
-#include <hyprland/src/render/Renderer.hpp>
 
-#include "config.hpp"
 #include "config/shared/workspace/WorkspaceRuleManager.hpp"
 #include "layout/grid.hpp"
 #include "overview.hpp"
@@ -234,41 +231,3 @@ bool HTManager::overview_static_on_monitor(PHLMONITOR pMonitor) {
     return true;
 }
 
-bool HTManager::on_window_damage(PHLWINDOW window) {
-    if (!HTConfig::value<Config::INTEGER>("experimental:snapshots"))
-        return false;
-    if (window == nullptr)
-        return false;
-    const PHLMONITOR mon = window->m_monitor.lock();
-    if (mon == nullptr)
-        return false;
-    const PHTVIEW view = get_view_from_monitor(mon);
-    if (view == nullptr || !view->active || view->layout == nullptr)
-        return false;
-    if (view->layout->layout_name() != "grid")
-        return false;
-    const PHLWORKSPACE ws = window->m_workspace;
-    if (ws == nullptr)
-        return false;
-    static_cast<HTLayoutGrid*>(view->layout.get())->invalidate_snapshot(ws->m_id);
-
-    // Re-render the invalidated snapshot OUTSIDE the render: doLater runs between frames
-    // (before the next render), so beginFullFakeRender is top-level there. Coalesced to one
-    // refresh per burst; it re-snapshots the dirty workspaces then repaints.
-    if (!m_snapshot_refresh_pending) {
-        m_snapshot_refresh_pending = true;
-        g_pEventLoopManager->doLater([this]() {
-            m_snapshot_refresh_pending = false;
-            for (const PHTVIEW& v : views) {
-                if (v == nullptr || !v->active || v->layout == nullptr)
-                    continue;
-                if (v->layout->layout_name() != "grid")
-                    continue;
-                static_cast<HTLayoutGrid*>(v->layout.get())->take_snapshots();
-                if (const PHLMONITOR m = v->get_monitor())
-                    g_pHyprRenderer->damageMonitor(m);
-            }
-        });
-    }
-    return true;
-}
