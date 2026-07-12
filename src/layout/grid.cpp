@@ -19,6 +19,8 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/RectPassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
+#include <hyprland/src/render/gl/GLFramebuffer.hpp>
 #include <hyprutils/math/Vector2D.hpp>
 #include <hyprutils/utils/ScopeGuard.hpp>
 
@@ -112,7 +114,8 @@ void HTLayoutGrid::refresh_workspace_cache(
         return;
 
     refresh_grid_dims();
-    m_layout_cached = false;  // dims/slots may have changed → force a layout rebuild
+    m_layout_cached = false;   // dims/slots may have changed → force a layout rebuild
+    invalidate_snapshots();    // workspace set/dims changed → re-render experimental snapshots
     int ROWS, COLS;
     get_grid_dims(ROWS, COLS);
     const int LAYERS = HTConfig::value<Config::INTEGER>("grid:layers");
@@ -449,6 +452,31 @@ void HTLayoutGrid::build_overview_layout(HTViewStage stage) {
     m_cached_mon_size = monitor->m_transformedSize;
 }
 
+// EXPERIMENTAL: render `workspace` into its cached offscreen framebuffer if the cache entry
+// is invalid, and return it. (plugin:hyprtasking:experimental:snapshots)
+SP<Render::IFramebuffer> HTLayoutGrid::snapshot_for(
+    PHLMONITOR monitor, PHLWORKSPACE workspace, const Time::steady_tp& time
+) {
+    if (monitor == nullptr || workspace == nullptr)
+        return nullptr;
+
+    HTSnapshot&    snap = m_snapshots[workspace->m_id];
+    const Vector2D sz   = monitor->m_transformedSize;
+    if (snap.fb == nullptr) {
+        snap.fb    = makeShared<Render::GL::CGLFramebuffer>();
+        snap.valid = false;
+    }
+    if (!snap.fb->isAllocated() || snap.fb->m_size != sz) {
+        snap.fb->alloc((int)sz.x, (int)sz.y);
+        snap.valid = false;
+    }
+    if (!snap.valid) {
+        render_workspace_to_fb(snap.fb, monitor, workspace, time);
+        snap.valid = true;
+    }
+    return snap.fb;
+}
+
 // Render each visible workspace directly into its grid tile via a scaled
 // renderWorkspace (renderModif). The renderTexture hook keeps the per-surface
 // scissor in sync with that renderModif, so window contents aren't culled near
@@ -510,6 +538,37 @@ void HTLayoutGrid::render() {
         return !global_box.expand(BORDERSIZE).intersection(global_mon_box).empty();
     };
 
+    // EXPERIMENTAL: snapshot every visible REAL workspace UP-FRONT (before any composite pass
+    // elements below), so the offscreen renders don't nest inside the outer render pass.
+    const bool USE_SNAPSHOTS = HTConfig::value<Config::INTEGER>("experimental:snapshots");
+    if (USE_SNAPSHOTS) {
+        for (const auto& [ws_id, ws_layout] : overview_layout) {
+            if (!tile_visible(ws_layout.box))
+                continue;
+            if (const PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id))
+                snapshot_for(monitor, ws, time);
+        }
+    }
+
+    // Composite one tile: an experimental cached snapshot texture when available, else the
+    // direct scaled renderWorkspace path (also the path for empty/synthetic cells).
+    const auto composite_tile = [&](WORKSPACEID ws_id, const CBox& box) {
+        const PHLWORKSPACE ws = g_pCompositor->getWorkspaceByID(ws_id);
+        if (USE_SNAPSHOTS && ws != nullptr) {
+            const auto it = m_snapshots.find(ws_id);
+            if (it != m_snapshots.end() && it->second.valid && it->second.fb != nullptr
+                && it->second.fb->getTexture() != nullptr) {
+                CTexPassElement::SRenderData tdata;
+                tdata.tex   = it->second.fb->getTexture();
+                tdata.box   = box;
+                tdata.round = ROUNDING;
+                g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(tdata));
+                return;
+            }
+        }
+        render_workspace_at_box(monitor, ws, time, box);
+    };
+
     // Borders first, so window contents render on top of them. Workspace contents now
     // render unclipped (a window moving to a new workspace on release can extend past
     // its tile), and should not be covered by the tile borders.
@@ -534,11 +593,11 @@ void HTLayoutGrid::render() {
     for (const auto& [ws_id, ws_layout] : overview_layout) {
         if (!tile_visible(ws_layout.box) || ws_id == start_workspace->m_id)
             continue;
-        render_workspace_at_box(monitor, g_pCompositor->getWorkspaceByID(ws_id), time, ws_layout.box);
+        composite_tile(ws_id, ws_layout.box);
     }
     if (const auto it = overview_layout.find(start_workspace->m_id);
         it != overview_layout.end() && tile_visible(it->second.box))
-        render_workspace_at_box(monitor, start_workspace, time, it->second.box);
+        composite_tile(start_workspace->m_id, it->second.box);
 
     // Draw a "+" on cells whose numbered workspace doesn't exist yet, so empty
     // cells read as "create/switch here". (#8)

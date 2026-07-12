@@ -1,6 +1,8 @@
 #pragma once
 
 #include <hyprland/src/helpers/AnimatedVariable.hpp>
+#include <hyprland/src/helpers/time/Time.hpp>
+#include <hyprland/src/render/Framebuffer.hpp>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -34,6 +36,15 @@ class HTLayoutGrid: public HTLayoutBase {
     int m_cached_cols = 0;
     Vector2D m_cached_mon_size {};
 
+    // EXPERIMENTAL snapshot cache (plugin:hyprtasking:experimental:snapshots): workspace id →
+    // offscreen framebuffer + validity. Filled on demand by snapshot_for(); invalidated on
+    // open / move / workspace change so it re-renders.
+    struct HTSnapshot {
+        SP<Render::IFramebuffer> fb;
+        bool                     valid = false;
+    };
+    std::unordered_map<WORKSPACEID, HTSnapshot> m_snapshots;
+
     static long long pack_slot(int layer, int x, int y);
 
   public:
@@ -60,6 +71,11 @@ class HTLayoutGrid: public HTLayoutBase {
     virtual void init_position();
     virtual void build_overview_layout(HTViewStage stage);
     virtual void render();
+
+    // EXPERIMENTAL snapshots. snapshot_for renders `workspace` into its cached FBO if the
+    // cache entry is invalid, and returns it; invalidate_snapshots forces a re-render.
+    SP<Render::IFramebuffer> snapshot_for(PHLMONITOR monitor, PHLWORKSPACE workspace, const Time::steady_tp& time);
+    void invalidate_snapshots() { for (auto& [id, s] : m_snapshots) s.valid = false; }
 
     void get_grid_dims(int& rows, int& cols);
     void refresh_grid_dims();

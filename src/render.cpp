@@ -92,3 +92,43 @@ void render_workspace_at_box(
         workspace->m_visible = false;
     }
 }
+
+// EXPERIMENTAL snapshot path — see render.hpp.
+void render_workspace_to_fb(
+    SP<Render::IFramebuffer> fb,
+    PHLMONITOR monitor,
+    PHLWORKSPACE workspace,
+    const Time::steady_tp& time
+) {
+    if (fb == nullptr || monitor == nullptr || workspace == nullptr)
+        return;
+
+    // Target the offscreen fb. Public API (no protected-access hack). The full monitor is
+    // the damage/target region for the snapshot.
+    CRegion damage {CBox {0, 0, monitor->m_transformedSize.x, monitor->m_transformedSize.y}};
+    if (!g_pHyprRenderer->beginFullFakeRender(monitor, damage, fb))
+        return;
+
+    // renderWorkspace only fully renders the monitor's active+visible workspace, so make
+    // this one active+visible for the snapshot, then restore (same trick as
+    // render_workspace_at_box, but now ONCE per snapshot into an FBO, not per tile per frame).
+    const PHLWORKSPACE prev = monitor->m_activeWorkspace;
+    monitor->m_activeWorkspace = workspace;
+    g_pDesktopAnimationManager->startAnimation(
+        workspace, CDesktopAnimationManager::ANIMATION_TYPE_IN, false, true
+    );
+    workspace->m_visible = true;
+
+    const CBox full = {{0, 0}, monitor->m_transformedSize};
+    ((render_workspace_t)(render_workspace_hook->m_original))(
+        g_pHyprRenderer.get(), monitor, workspace, time, full
+    );
+
+    g_pDesktopAnimationManager->startAnimation(
+        workspace, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false, true
+    );
+    workspace->m_visible = false;
+    monitor->m_activeWorkspace = prev;
+
+    g_pHyprRenderer->endRender();
+}

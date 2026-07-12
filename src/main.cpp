@@ -859,6 +859,11 @@ static void init_config() {
     addConfigValue(CIntValue, "warp_on_move_window", "warp on move window", 1);
     addConfigValue(CIntValue, "close_overview_on_reload", "close overview on reload", 1);
 
+    // EXPERIMENTAL: render each workspace once into an offscreen snapshot and composite the
+    // cached texture into tiles, instead of re-rendering every workspace every frame via the
+    // active-workspace swap. Opt-in while it's verified live. Default OFF = unchanged path.
+    addConfigValue(CIntValue, "experimental:snapshots", "experimental: offscreen workspace snapshots + composite (opt-in)", 0);
+
     addConfigValue(CIntValue, "drag_button", "drag button", BTN_LEFT);
     addConfigValue(CIntValue, "select_button", "select button", BTN_RIGHT);
 
