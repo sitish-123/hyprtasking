@@ -496,8 +496,15 @@ typedef void (*damage_window_t)(void*, PHLWINDOW, bool);
 static void hook_damage_window(void* thisptr, PHLWINDOW window, bool forceFull) {
     if (ht_manager != nullptr && window != nullptr) {
         const PHLMONITOR mon = window->m_monitor.lock();
-        if (mon != nullptr && ht_manager->overview_static_on_monitor(mon))
-            return;
+        if (mon != nullptr && ht_manager->overview_static_on_monitor(mon)) {
+            // With EXPERIMENTAL snapshots on, don't freeze: invalidate this window's
+            // workspace snapshot and schedule one repaint so the composite re-snapshots it
+            // (live tile content updates). Without snapshots, freeze the last frame (default).
+            if (ht_manager->on_window_damage(window))
+                g_pHyprRenderer->damageMonitor(mon);
+            else
+                return;
+        }
     }
     ((damage_window_t)(damage_window_hook->m_original))(thisptr, window, forceFull);
 }

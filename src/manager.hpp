@@ -76,4 +76,10 @@ class HTManager {
     // navigating, closing, or mid-swipe). Used to freeze client content damage so an
     // idle overview over a live window doesn't drive a full re-render every frame.
     bool overview_static_on_monitor(PHLMONITOR pMonitor);
+
+    // EXPERIMENTAL snapshots: if the overview is open (grid) with snapshots enabled and
+    // `window` is on a monitor showing it, invalidate that window's workspace snapshot so it
+    // re-renders on the next composite (live tile content). Returns true if it did — the
+    // damage hook then lets the damage through + schedules a repaint instead of freezing.
+    bool on_window_damage(PHLWINDOW window);
 };

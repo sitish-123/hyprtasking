@@ -11,6 +11,7 @@
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/layout/LayoutManager.hpp>
 
+#include "config.hpp"
 #include "config/shared/workspace/WorkspaceRuleManager.hpp"
 #include "layout/grid.hpp"
 #include "overview.hpp"
@@ -228,5 +229,25 @@ bool HTManager::overview_static_on_monitor(PHLMONITOR pMonitor) {
         return false;
     if (view->layout == nullptr || view->layout->is_animating())
         return false;
+    return true;
+}
+
+bool HTManager::on_window_damage(PHLWINDOW window) {
+    if (!HTConfig::value<Config::INTEGER>("experimental:snapshots"))
+        return false;
+    if (window == nullptr)
+        return false;
+    const PHLMONITOR mon = window->m_monitor.lock();
+    if (mon == nullptr)
+        return false;
+    const PHTVIEW view = get_view_from_monitor(mon);
+    if (view == nullptr || !view->active || view->layout == nullptr)
+        return false;
+    if (view->layout->layout_name() != "grid")
+        return false;
+    const PHLWORKSPACE ws = window->m_workspace;
+    if (ws == nullptr)
+        return false;
+    static_cast<HTLayoutGrid*>(view->layout.get())->invalidate_snapshot(ws->m_id);
     return true;
 }

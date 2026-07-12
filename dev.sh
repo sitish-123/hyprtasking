@@ -17,7 +17,9 @@ STOCK_SO="$CACHE/hyprtasking/hyprtasking.so"
 SCROLL_SO="$CACHE/hyprland-scroll-overview/scrolloverview.so"
 STATE="$HOME/.config/hypr/custom/overview.state"
 
-build() { meson compile -C "$DIR/build"; }
+# --reconfigure first so a newly-added src/*.cpp (meson.build globs sources at CONFIGURE
+# time) is actually picked up — a bare `meson compile` silently misses new files.
+build() { meson setup --reconfigure "$DIR/build" >/dev/null 2>&1 || true; meson compile -C "$DIR/build"; }
 
 unload_overviews() {
   hyprctl plugin unload "$STOCK_SO"  >/dev/null 2>&1 || true

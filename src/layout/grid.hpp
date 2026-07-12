@@ -76,6 +76,12 @@ class HTLayoutGrid: public HTLayoutBase {
     // cache entry is invalid, and returns it; invalidate_snapshots forces a re-render.
     SP<Render::IFramebuffer> snapshot_for(PHLMONITOR monitor, PHLWORKSPACE workspace, const Time::steady_tp& time);
     void invalidate_snapshots() { for (auto& [id, s] : m_snapshots) s.valid = false; }
+    // Invalidate ONE workspace's snapshot (live-content damage → re-render just that tile).
+    void invalidate_snapshot(WORKSPACEID id) {
+        const auto it = m_snapshots.find(id);
+        if (it != m_snapshots.end())
+            it->second.valid = false;
+    }
 
     void get_grid_dims(int& rows, int& cols);
     void refresh_grid_dims();
