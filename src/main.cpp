@@ -467,11 +467,18 @@ static bool hook_should_render_window(void* thisptr, PHLWINDOW window, PHLMONITO
         ((should_render_window_t)(should_render_window_hook->m_original))(thisptr, window, monitor);
     if (ht_manager == nullptr || !ht_manager->has_active_view())
         return ori_result;
-    // During a full-res offscreen snapshot, render windows exactly as Hyprland would. The
-    // overview-tile-space culling below is for the SCALED composite; applied to the snapshot
-    // it culls every window → invisible apps in the tiles.
-    if (g_rendering_snapshot)
+    // During a full-res offscreen snapshot, skip the overview tile-space culling below (it's
+    // for the SCALED composite and would cull every window → invisible apps), but KEEP the
+    // workspace-match guard: Hyprland's ori_result is also true for windows that are pinned or
+    // mid-animation on OTHER workspaces, so without this the last-focused window bleeds into
+    // EVERY workspace's snapshot (the "mirroring" — same window in every tile).
+    if (g_rendering_snapshot) {
+        const PHLWORKSPACE ws = window ? window->m_workspace : nullptr;
+        if (ws == nullptr || monitor->m_activeWorkspace == nullptr
+            || ws != monitor->m_activeWorkspace)
+            return false;
         return ori_result;
+    }
     const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
     if (view == nullptr)
         return ori_result;
