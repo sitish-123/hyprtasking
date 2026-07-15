@@ -467,6 +467,11 @@ static bool hook_should_render_window(void* thisptr, PHLWINDOW window, PHLMONITO
         ((should_render_window_t)(should_render_window_hook->m_original))(thisptr, window, monitor);
     if (ht_manager == nullptr || !ht_manager->has_active_view())
         return ori_result;
+    // During a full-res offscreen snapshot, render windows exactly as Hyprland would. The
+    // overview-tile-space culling below is for the SCALED composite; applied to the snapshot
+    // it culls every window → invisible apps in the tiles.
+    if (g_rendering_snapshot)
+        return ori_result;
     const PHTVIEW view = ht_manager->get_view_from_monitor(monitor);
     if (view == nullptr)
         return ori_result;

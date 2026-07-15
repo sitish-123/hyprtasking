@@ -24,6 +24,12 @@ inline CFunctionHook* damage_window_hook = nullptr;
 typedef uint32_t (*origIsSolitaryBlocked)(void*, bool);
 inline void* render_window = nullptr;
 
+// True ONLY while render_workspace_to_fb is doing a full-res offscreen snapshot. Tells the
+// shouldRenderWindow hook to render windows NORMALLY (skip the overview-tile-space culling,
+// which is for the scaled composite) — otherwise every window is culled out of the snapshot
+// and the tiles show wallpaper with no windows (invisible apps).
+inline bool g_rendering_snapshot = false;
+
 inline std::unique_ptr<HTManager> ht_manager;
 
 template<typename... Args>

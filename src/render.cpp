@@ -121,9 +121,13 @@ void render_workspace_to_fb(
     workspace->m_visible = true;
 
     const CBox full = {{0, 0}, monitor->m_transformedSize};
+    // Render windows as Hyprland normally would (see g_rendering_snapshot) — the overview's
+    // shouldRenderWindow culling is for the scaled composite and would empty the snapshot.
+    g_rendering_snapshot = true;
     ((render_workspace_t)(render_workspace_hook->m_original))(
         g_pHyprRenderer.get(), monitor, workspace, time, full
     );
+    g_rendering_snapshot = false;
 
     // Restore prior VISIBILITY and leave the workspace at IN (offset 0 / alpha 1) — do NOT
     // warp it OUT. Forcing OUT left every snapshotted workspace faded out + hidden, so the
