@@ -112,7 +112,8 @@ void render_workspace_to_fb(
     // renderWorkspace only fully renders the monitor's active+visible workspace, so make
     // this one active+visible for the snapshot, then restore (same trick as
     // render_workspace_at_box, but now ONCE per snapshot into an FBO, not per tile per frame).
-    const PHLWORKSPACE prev = monitor->m_activeWorkspace;
+    const PHLWORKSPACE prev       = monitor->m_activeWorkspace;
+    const bool         wasVisible = workspace->m_visible;
     monitor->m_activeWorkspace = workspace;
     g_pDesktopAnimationManager->startAnimation(
         workspace, CDesktopAnimationManager::ANIMATION_TYPE_IN, false, true
@@ -124,10 +125,11 @@ void render_workspace_to_fb(
         g_pHyprRenderer.get(), monitor, workspace, time, full
     );
 
-    g_pDesktopAnimationManager->startAnimation(
-        workspace, CDesktopAnimationManager::ANIMATION_TYPE_OUT, false, true
-    );
-    workspace->m_visible = false;
+    // Restore prior VISIBILITY and leave the workspace at IN (offset 0 / alpha 1) — do NOT
+    // warp it OUT. Forcing OUT left every snapshotted workspace faded out + hidden, so the
+    // real desktop went dark/"invisible" (the active one after the overview closed, or any
+    // workspace you switched to). The FBO already captured the frame; no revert is needed.
+    workspace->m_visible = wasVisible;
     monitor->m_activeWorkspace = prev;
 
     g_pHyprRenderer->endRender();
